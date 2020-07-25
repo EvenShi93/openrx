@@ -94,8 +94,8 @@ void Afhds_Loop(void)
       else if ((Bind_Cnt == 255) && (Bind_Flag == 0))
       {
         Bind_Flag = 1;
-        TIM14->DIER &= (uint16_t)~TIM_IT_Update;
-        EXTI->IMR &= ~EXTI_Line0;
+        TIM14->DIER &= ~TIM_DIER_UIE;
+        EXTI->IMR &= ~EXTI_IMR_MR0;
         Afhds_Bind();
         A7105_GDO_Init();
         TimeOut_Init();
@@ -174,7 +174,7 @@ void Afhds_Bind(void)
   Last_Time = Now_Time;
   while (1)
   {
-    if ((GPIOA->IDR & GPIO_Pin_1) == 0)
+    if ((GPIOA->IDR & GPIO_IDR_1) == 0)
     {
       if ((button == 1) && ((Now_Time - Last_Button) > 1000))
       {
@@ -190,7 +190,7 @@ void Afhds_Bind(void)
       Last_Led = Now_Time;
       Bind_Led_Status();
     }
-    if ((GPIOA->IDR & GPIO_Pin_0) == 0)
+    if ((GPIOA->IDR & GPIO_IDR_0) == 0)
     {
       if ((A7105_ReadReg(A7105_REG_MODE) & (1 << 5)) != 0)
       {
@@ -242,7 +242,7 @@ void Afhds_Bind(void)
 
 void A7105_SetChan(uint8_t skip, uint8_t num)
 {
-  EXTI->IMR &= ~EXTI_Line0;
+  EXTI->IMR &= ~EXTI_IMR_MR0;
   FHSS_Chan_Cnt += skip;
   while (FHSS_Chan_Cnt >= num)
     FHSS_Chan_Cnt -= num;
@@ -250,7 +250,7 @@ void A7105_SetChan(uint8_t skip, uint8_t num)
   A7105_Strobe(A7105_RST_RDPTR);
   A7105_WriteReg(A7105_REG_CHANNEL, RF_Para.Flash_Para.Hopping_Map[FHSS_Chan_Cnt]);
   A7105_Strobe(A7105_RX);
-  EXTI->IMR |= EXTI_Line0;
+  EXTI->IMR |= EXTI_IMR_MR0;
 }
 
 void A7105_GDO_Init(void)
@@ -307,10 +307,10 @@ void TimeOut_Init(void)
 
 void EXTI0_1_IRQHandler(void)
 {
-  if (EXTI_GetITStatus(EXTI_Line0) != RESET)
+  if ((EXTI->PR & EXTI_PR_PR0) && (EXTI->IMR & EXTI_IMR_MR0))
   {
-    EXTI->PR = EXTI_Line0;
-    if ((GPIOA->IDR & GPIO_Pin_0) == 0)
+    EXTI->PR = EXTI_PR_PR0;
+    if ((GPIOA->IDR & GPIO_IDR_0) == 0)
     {
       if ((A7105_ReadReg(A7105_REG_MODE) & (1 << 5)) != 0)
       {
@@ -327,11 +327,11 @@ void EXTI0_1_IRQHandler(void)
           RED_LED_OFF;
           Bind_Flag = 2;
           Miss_Packet_Cnt = 0;
-          TIM16->DIER &= ~TIM_IT_Update;
+          TIM16->DIER &= ~TIM_DIER_UIE;
           TIM16->ARR = 1550;
           TIM16->CNT = 0;
-          TIM16->SR = ~TIM_IT_Update;
-          TIM16->DIER |= TIM_IT_Update;
+          TIM16->SR = ~TIM_SR_UIF;
+          TIM16->DIER |= TIM_DIER_UIE;
           A7105_SetChan(1, 16);
 
           for (uint8_t i = 0; i < 8; i++)
@@ -352,10 +352,10 @@ void EXTI0_1_IRQHandler(void)
 
 void TIM16_IRQHandler()
 {
-  if ((TIM16->SR & TIM_IT_Update) && (TIM16->DIER & TIM_IT_Update))
+  if ((TIM16->SR & TIM_SR_UIF) && (TIM16->DIER & TIM_DIER_UIE))
   {
-    TIM16->SR = (uint16_t)~TIM_IT_Update;
-    TIM16->DIER &= (uint16_t)~TIM_IT_Update;
+    TIM16->SR = ~TIM_SR_UIF;
+    TIM16->DIER &= ~TIM_DIER_UIE;
     TIM16->CNT = 0;
     A7105_SetChan(1, 16);
     Miss_Packet_Cnt++;
@@ -366,7 +366,7 @@ void TIM16_IRQHandler()
         Bind_Cnt++;
       }
       TIM16->ARR = 24000;
-      TIM16->DIER |= TIM_IT_Update;
+      TIM16->DIER |= TIM_DIER_UIE;
       GREEN_LED_OFF;
       RED_LED_ON;
       for (uint8_t i = 0; i < 8; i++)
@@ -376,7 +376,7 @@ void TIM16_IRQHandler()
     }
     else
     {
-      TIM16->DIER |= TIM_IT_Update;
+      TIM16->DIER |= TIM_DIER_UIE;
     }
   }
 }
@@ -406,9 +406,9 @@ void SysTim_Init(void)
 
 void TIM17_IRQHandler()
 {
-  if ((TIM17->SR & TIM_IT_Update) && (TIM17->DIER & TIM_IT_Update))
+  if ((TIM17->SR & TIM_SR_UIF) && (TIM17->DIER & TIM_DIER_UIE))
   {
-    TIM17->SR = (uint16_t)~TIM_IT_Update;
+    TIM17->SR = ~TIM_SR_UIF;
     Now_Time++;
     if (Bind_Flag == 2)
       Port_Output();

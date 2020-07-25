@@ -48,17 +48,17 @@ void Port_Init(void)
   GPIO_PinAFConfig(GPIOA, GPIO_PinSource10, GPIO_AF_2);
   GPIO_PinAFConfig(GPIOB, GPIO_PinSource1, GPIO_AF_1);
 
-  TIM_TimeBaseStructure.TIM_Period = 20000;
-  TIM_TimeBaseStructure.TIM_Prescaler = 47;
+  TIM_TimeBaseStructure.TIM_Period = 1000;
+  TIM_TimeBaseStructure.TIM_Prescaler = 0;
   TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
   TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
 
-  TIM_TimeBaseInit(TIM1, &TIM_TimeBaseStructure);
-  TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
-
-  TIM_TimeBaseStructure.TIM_Period = 1000;
-  TIM_TimeBaseStructure.TIM_Prescaler = 0;
   TIM_TimeBaseInit(TIM14, &TIM_TimeBaseStructure);
+
+  TIM_TimeBaseStructure.TIM_Period = 20000;
+  TIM_TimeBaseStructure.TIM_Prescaler = 47;
+
+  TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
 
   TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
   TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
@@ -68,12 +68,12 @@ void Port_Init(void)
   TIM_OCInitStructure.TIM_OCNIdleState = TIM_OCNIdleState_Reset;
   TIM_OCInitStructure.TIM_Pulse = 0;
 
+  TIM_OC1Init(TIM14, &TIM_OCInitStructure);
+  TIM_OC1PreloadConfig(TIM14, TIM_OCPreload_Enable);
   TIM_OC1Init(TIM3, &TIM_OCInitStructure);
   TIM_OC1PreloadConfig(TIM3, TIM_OCPreload_Enable);
   TIM_OC4Init(TIM3, &TIM_OCInitStructure);
   TIM_OC4PreloadConfig(TIM3, TIM_OCPreload_Enable);
-  TIM_OC1Init(TIM14, &TIM_OCInitStructure);
-  TIM_OC1PreloadConfig(TIM14, TIM_OCPreload_Enable);
 
   if (RF_Para.Flash_Para.Output_Mode == PWM_Mode)
   {
@@ -114,11 +114,11 @@ void Port_Init(void)
     TIM_TimeBaseStructure.TIM_Period = 22000;
     TIM_OCInitStructure.TIM_Pulse = 299;
 
-    NVIC_InitStructure.NVIC_IRQChannel = TIM15_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannel = TIM1_BRK_UP_TRG_COM_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-    TIM_ITConfig(TIM15, TIM_IT_Update, ENABLE);
+    TIM_ITConfig(TIM1, TIM_IT_Update, ENABLE);
 
     TIM_TimeBaseInit(TIM1, &TIM_TimeBaseStructure);
     TIM_OC3Init(TIM1, &TIM_OCInitStructure);
@@ -140,6 +140,7 @@ void Port_Init(void)
 void Port_Output(void)
 {
   static uint32_t output_cnt = 0;
+
   output_cnt++;
   if (RF_Para.Flash_Para.Output_Mode == PWM_Mode)
   {
@@ -193,5 +194,30 @@ void Port_Output(void)
       ppm_data[8] = (Rssi > 100 ? 2000 : Rssi * 10 + 1000);
       ppm_data[9] = ppmlength - ppm_data[8];
     }
+  }
+}
+
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+{
+  if ((TIM1->SR & TIM_SR_UIF) && (TIM1->DIER & TIM_DIER_UIE))
+  {
+    TIM1->SR = ~TIM_SR_UIF;
+    if (ppm_pos < 10)
+      TIM1->ARR = ppm_data[ppm_pos];
+    ppm_pos++;
+    if (ppm_pos >= 10)
+      ppm_pos = 0;
+  }
+}
+
+void USART1_IRQHandler(void)
+{
+  uint32_t status = USART1->ISR;
+  if (status & USART_ISR_TXE)
+  {
+    if (sbus_pos >= 25)
+      USART1->CR1 &= ~USART_CR1_TXEIE;
+    else
+      USART1->TDR = sbus.byte[sbus_pos++];
   }
 }
